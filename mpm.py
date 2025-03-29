@@ -4,7 +4,7 @@ import subprocess
 import argparse
 
 # Constants
-REGISTRY_URL = "https://raw.githubusercontent.com/ctpldev/mpm-registry/main/registry.json"
+REGISTRY_URL = "https://raw.githubusercontent.com/your-username/mpm-registry/main/registry.json"
 CONFIG_FILE = "platform.json"
 LIB_DIR = "lib"
 DEV_DIR = "dev"
@@ -36,12 +36,20 @@ def save_config(config):
 # Commands
 def init_platform(args):
     """Initialize a new project for a specific platform."""
+    project_name = args.project_name
     platform = args.platform or "gcc"
     config = {
-        "name": os.path.basename(os.getcwd()),
+        "name": project_name,
         "platform": platform,
         "dependencies": {}
     }
+
+    # Create project folder
+    project_dir = project_name
+    os.makedirs(project_dir, exist_ok=True)
+    os.chdir(project_dir)
+
+    # Create required directories
     os.makedirs(DEV_DIR, exist_ok=True)
     os.makedirs(f"{DEV_DIR}/src", exist_ok=True)
     os.makedirs(f"{DEV_DIR}/include", exist_ok=True)
@@ -61,7 +69,7 @@ int main() {
         )
 
     save_config(config)
-    print(f"Initialized project for platform: {platform}")
+    print(f"Initialized project '{project_name}' for platform: {platform}")
 
 def install_library(args):
     """Install a library by name."""
@@ -120,7 +128,8 @@ def main():
 
     # Init command
     parser_init = subparsers.add_parser("init", help="Initialize a new project")
-    parser_init.add_argument("platform", nargs="?", help="Target platform (default: gcc)")
+    parser_init.add_argument("project_name", help="Name of the project folder to create")
+    parser_init.add_argument("--platform", help="Target platform (default: gcc)")
     parser_init.set_defaults(func=init_platform)
 
     # Install command
