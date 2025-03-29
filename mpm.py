@@ -2,12 +2,27 @@ import os
 import json
 import subprocess
 import argparse
+import platform as sys_platform
 
 # Constants
 REGISTRY_URL = "https://raw.githubusercontent.com/your-username/mpm-registry/main/registry.json"
 CONFIG_FILE = "platform.json"
 LIB_DIR = "lib"
 DEV_DIR = "dev"
+OBJ_DIR = "output/obj"
+BIN_DIR = "output/bin"
+
+# Determine the compiler based on the OS
+def get_compiler():
+    current_os = sys_platform.system()
+    if current_os == "Windows":
+        return "mingw32-gcc"
+    elif current_os == "Linux":
+        return "gcc"
+    elif current_os == "Darwin":  # macOS
+        return "gcc"
+    else:
+        raise Exception(f"Unsupported OS: {current_os}")
 
 # Utility Functions
 def load_registry():
@@ -33,11 +48,36 @@ def save_config(config):
     with open(CONFIG_FILE, "w") as f:
         json.dump(config, f, indent=4)
 
+def create_makefile(platform):
+    """Generate a Makefile for the project."""
+    makefile_content = f"""
+CC := {platform}
+SRC := $(wildcard {DEV_DIR}/src/*.c)
+OBJ := $(patsubst {DEV_DIR}/src/%.c, {OBJ_DIR}/%.o, $(SRC))
+INCLUDE := -I{DEV_DIR}/include
+LIBS := -L{LIB_DIR} -l$(notdir $(basename $(wildcard {LIB_DIR}/*)))
+OUT := {BIN_DIR}/main
+
+all: $(OUT)
+
+$(OUT): $(OBJ)
+	$(CC) $(OBJ) $(LIBS) -o $(OUT)
+
+{OBJ_DIR}/%.o: {DEV_DIR}/src/%.c
+	@mkdir -p $(OBJ_DIR)
+	$(CC) -c $< $(INCLUDE) -o $@
+
+clean:
+	rm -rf {OBJ_DIR}/* {BIN_DIR}/*
+"""
+    with open("Makefile", "w") as f:
+        f.write(makefile_content)
+
 # Commands
 def init_platform(args):
     """Initialize a new project for a specific platform."""
     project_name = args.project_name
-    platform = args.platform or "gcc"
+    platform = args.platform or get_compiler()
     config = {
         "name": project_name,
         "platform": platform,
@@ -45,15 +85,16 @@ def init_platform(args):
     }
 
     # Create project folder
-    project_dir = project_name
-    os.makedirs(project_dir, exist_ok=True)
-    os.chdir(project_dir)
+    os.makedirs(project_name, exist_ok=True)
+    os.chdir(project_name)
 
     # Create required directories
     os.makedirs(DEV_DIR, exist_ok=True)
     os.makedirs(f"{DEV_DIR}/src", exist_ok=True)
     os.makedirs(f"{DEV_DIR}/include", exist_ok=True)
     os.makedirs(LIB_DIR, exist_ok=True)
+    os.makedirs(OBJ_DIR, exist_ok=True)
+    os.makedirs(BIN_DIR, exist_ok=True)
 
     # Create a hello world main.c file
     main_c_path = os.path.join(DEV_DIR, "src", "main.c")
@@ -68,6 +109,7 @@ int main() {
 """
         )
 
+    create_makefile(platform)
     save_config(config)
     print(f"Initialized project '{project_name}' for platform: {platform}")
 
@@ -100,21 +142,12 @@ def install_library(args):
 def build_project(args):
     """Build the project using the specified platform."""
     config = load_config()
-    platform = config.get("platform", "gcc")
+    platform = config.get("platform", get_compiler())
     print(f"Building project for platform: {platform}...")
 
-    # Compile source files
-    src_dir = os.path.join(DEV_DIR, "src")
-    build_dir = "build"
-    os.makedirs(build_dir, exist_ok=True)
-    
-    source_files = [os.path.join(src_dir, f) for f in os.listdir(src_dir) if f.endswith(".c")]
-    if platform == "gcc":
-        compile_cmd = ["gcc", "-o", os.path.join(build_dir, "main")] + source_files
-        subprocess.run(compile_cmd)
-        print("Build complete.")
-    else:
-        print(f"Platform '{platform}' not supported yet.")
+    # Invoke the Makefile
+    subprocess.run(["make"])
+    print("Build complete.")
 
 def deploy_project(args):
     """Deploy the compiled binaries to the target device."""
@@ -129,7 +162,7 @@ def main():
     # Init command
     parser_init = subparsers.add_parser("init", help="Initialize a new project")
     parser_init.add_argument("project_name", help="Name of the project folder to create")
-    parser_init.add_argument("--platform", help="Target platform (default: gcc)")
+    parser_init.add_argument("--platform", help="Target platform (default: gcc/mingw32-gcc)")
     parser_init.set_defaults(func=init_platform)
 
     # Install command
